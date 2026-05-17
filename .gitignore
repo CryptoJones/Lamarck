@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Lamarck-specific
+# Model checkpoints — never commit. Multi-hundred-GB binaries.
+checkpoints/
+weights/
+*.safetensors
+*.bin
+*.pt
+
+# Generated curricula. Reproducible from seed + G0; not source.
+curricula/*.jsonl
+!curricula/.gitkeep
+
+# Eval suite cache + run outputs.
+.eval-cache/
+runs/
+
+# Local config that might carry secrets.
+.env
+.env.*
+*.pem
+*.key

@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Aaron K. Clark
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lamarck"
+version = "0.0.0"
+description = "A 70B model whose only job is to raise better children"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Aaron K. Clark", email = "akclark@thenetwerk.net" }]
+requires-python = ">=3.11"
+# Runtime deps are kept off the scaffold deliberately — see DESIGN.md
+# milestone M1 for the actual inference harness, which will need
+# transformers, peft, bitsandbytes, datasets, accelerate, etc.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
