@@ -1,0 +1,16 @@
+{
+  "task_id": "cd_008_tests_first",
+  "category": "curriculum-design",
+  "prompt": "Design a curriculum to teach deepseek-coder-6.7b-instruct to write a comprehensive pytest test suite BEFORE writing the implementation when given a function spec (tests-first / TDD style). The tests must cover happy path, edge cases (empty, None, large inputs), and error cases. Output stages with (dataset, success criterion).",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "completeness", "points": 1, "description": "Covers prereqs + target + eval"},
+      {"id": "ordering",     "points": 1, "description": "Prereqs first"},
+      {"id": "specificity",  "points": 1, "description": "Names datasets / metrics"},
+      {"id": "plausibility", "points": 1, "description": "Would produce the capability"}
+    ]
+  },
+  "reference_solution": "Curriculum: teach DeepSeek-Coder-6.7B test-first development.\n\nStage 1 - pytest fluency.\n  Dataset: 20k (function, pytest-test-file) pairs harvested from open-source Python repos with high test coverage (cookbook: pytest-dev, scipy, scikit-learn). Filter for tests that pass; minimum 3 test functions per pair.\n  Success: 90% of generated test files parse with ast.parse + import cleanly on 500 held-out.\n\nStage 2 - Spec-to-test generation.\n  Dataset: 15k (docstring-spec, test-suite) pairs derived from stage-1 data by stripping implementation and feeding only the function signature + docstring. Augmented with hand-curated specs.\n  Success: 80% test-suite-validity (parses + asserts present) on 1k held-out; 70% coverage of cases identified by a reference Cline-style coverage analyzer.\n\nStage 3 - Edge case enumeration.\n  Dataset: 10k examples where the spec is annotated with explicit edge-case categories ('handles empty list', 'rejects negative input'). Reference test file has one test per category.\n  Success: 75% edge-case-coverage on a 500-spec eval (reference enumerates 5 edge-cases per spec; we measure overlap).\n\nStage 4 - Tests-first sequencing.\n  Dataset: 6k (spec, tests, implementation) triples where the output is structured as <tests>...</tests><implementation>...</implementation>. Train with cross-entropy loss + a sequence-order constraint (no impl token before all test tokens).\n  Success: 95% structural-order compliance on 500 held-out (tests block precedes implementation block); 80% of impl blocks pass the model's own test block.\n\nStage 5 - Test-driven correction.\n  Dataset: 4k (spec, wrong-impl, test-failure-trace, fixed-impl) examples. Format: tests run, fail, model fixes the impl, tests re-run, pass.\n  Success: 70% bug-fix-rate on a 500-example seeded-bug eval (impl initially fails 1+ tests).\n\nStage 6 - Held-out eval.\n  Dataset: 200 HumanEval+ problems shown spec-only (signature + docstring); 100 hand-written specs for less-common patterns (generators, context-managers, decorators).\n  Success: 65% of generated test suites achieve >= 80% statement coverage of the reference impl when run against it; 60% pass@1 once impl is also generated.\n"
+}

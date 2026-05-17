@@ -1,0 +1,16 @@
+{
+  "task_id": "cd_010_react_agent",
+  "category": "curriculum-design",
+  "prompt": "Design a curriculum to teach Llama-3.1-8B-Instruct to perform multi-turn agentic tool-use loops in the ReAct style (Thought -> Action -> Observation -> ... -> Final Answer). Tools available include a calculator, a web-search stub, and a code-execution stub. Output stages with (dataset, success criterion). The model must learn when to stop the loop and emit a final answer rather than calling more tools.",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "completeness", "points": 1, "description": "Covers prereqs + target + eval"},
+      {"id": "ordering",     "points": 1, "description": "Prereqs first"},
+      {"id": "specificity",  "points": 1, "description": "Names datasets / metrics"},
+      {"id": "plausibility", "points": 1, "description": "Would produce the capability"}
+    ]
+  },
+  "reference_solution": "Curriculum: teach Llama-3.1-8B ReAct-style multi-turn tool-use loops.\n\nStage 1 - Single-tool function-calling prereq.\n  Dataset: subset of cd_005 stage-2 (50k single-call format examples). Verify Llama-3.1-8B can emit a single well-formed tool call.\n  Success: 90% syntactic-template match on 500 held-out single-tool prompts.\n\nStage 2 - ReAct format introduction.\n  Dataset: 30k (question, trace) pairs where trace is 'Thought: <text>\\nAction: tool(args)\\nObservation: <result>\\nThought: ...\\nFinal Answer: <text>'. Source: HotpotQA-style multi-hop QA + ReAct-paper synthesised traces + Toolformer + AgentBench logs.\n  Success: 90% trace-format-compliance on 1k held-out (Thought/Action/Observation/Final-Answer labels in correct sequence).\n\nStage 3 - Multi-step decomposition.\n  Dataset: 15k 2-5-step trajectories spanning calculator + web-search + code-exec stubs. Source: hand-curated from MATH (calculator), HotpotQA (web-search), MBPP (code-exec) - convert each to ReAct format.\n  Success: 70% final-answer-correctness on a 500-trajectory held-out eval.\n\nStage 4 - Stopping behavior.\n  Dataset: 5k examples where the answer is known after 1-2 steps but the model is tempted to over-iterate. Negative DPO pairs (chosen=stops, rejected=keeps-calling-tools).\n  Success: median-turns-to-answer <= 1.3x ground-truth across the eval set; <= 10% over-calling (>3x ground-truth turns).\n\nStage 5 - Error recovery.\n  Dataset: 4k examples where one tool call returns an error (search returns nothing useful, calculator overflow). Reference trace re-plans, tries an alternative.\n  Success: 60% successful-recovery to correct final answer on a 500-error-injected eval.\n\nStage 6 - Held-out AgentBench eval.\n  Dataset: AgentBench held-out subset (~500 examples spanning calculator/search/code-exec stubs).\n  Success: AgentBench score >= 60% (above Llama-3.1-8B-Instruct base which is ~50%).\n"
+}

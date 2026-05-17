@@ -1,0 +1,16 @@
+{
+  "task_id": "cd_006_self_check_arithmetic",
+  "category": "curriculum-design",
+  "prompt": "Design a curriculum to teach Phi-3-mini-4k-instruct to self-check its arithmetic before committing to a final answer in chain-of-thought reasoning. Specifically: after producing an answer, the model should re-derive it via a different method (e.g., reverse the operation, dimensional analysis, plug-back substitution) and either confirm or correct. Output stages with (dataset, success criterion).",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "completeness", "points": 1, "description": "Covers prereqs + target + eval"},
+      {"id": "ordering",     "points": 1, "description": "Prereqs first"},
+      {"id": "specificity",  "points": 1, "description": "Names datasets / metrics"},
+      {"id": "plausibility", "points": 1, "description": "Would produce the capability"}
+    ]
+  },
+  "reference_solution": "Curriculum: teach Phi-3-mini-4k self-check arithmetic in CoT.\n\nStage 1 - Single-shot arithmetic accuracy baseline.\n  Dataset: GSM8K train set (7473 problems) for SFT; format <reasoning> then <answer>.\n  Success: 65% pass@1 on GSM8K test set (1319 problems).\n\nStage 2 - Operation reversibility.\n  Dataset: 10k pairs of (problem, forward-solve, reverse-check-trace). E.g., for '17 + 24 = 41', the reverse check trace is '41 - 24 should equal 17. 41 - 24 = 17. confirmed.' Source: programmatically generate from GSM8K + synthetic generation for the 4 basic ops at varying difficulty.\n  Success: 90% reverse-check-trace correctness on 1k synthetic eval; downstream GSM8K maintained at >= 65%.\n\nStage 3 - Self-check format.\n  Dataset: 8k (problem, answer-with-self-check) examples in the format '<reasoning>...</reasoning><answer>X</answer><self-check>method: reverse... verified.</self-check>'. Source: augment stage-2 traces with the explicit XML self-check block.\n  Success: 95% format presence on 500 held-out; CoT-accuracy on GSM8K maintained >= 65%.\n\nStage 4 - Self-correction on detected error.\n  Dataset: 5k DPO pairs (wrong-answer-with-correction, wrong-answer-without-correction) where the chosen one detects the error in self-check and reverses to the correct answer. Source: corrupt stage-3 outputs + hand-curated correction traces.\n  Success: detection-rate of seeded-arithmetic-errors >= 70% on a 500-example arithmetic-error-injection eval.\n\nStage 5 - Multi-step word problems.\n  Dataset: 6k MATH dataset (algebra/precalculus subset) problems with self-check applied to the final numerical step. Source: hendrycks/MATH train split.\n  Success: 25% pass@1 on MATH algebra subset (Phi-3-mini baseline is ~17%); self-check causes a recorded correction in 8-15% of traces.\n\nStage 6 - Held-out eval.\n  Dataset: 200 GSM8K-hard + 200 MATH-algebra held-out problems.\n  Success: 70% on GSM8K-hard; 25% on MATH-algebra; >= 5% absolute improvement attributable to self-check (ablation: same prompt without self-check format).\n"
+}

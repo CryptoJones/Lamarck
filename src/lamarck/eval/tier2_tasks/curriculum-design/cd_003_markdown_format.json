@@ -1,0 +1,16 @@
+{
+  "task_id": "cd_003_markdown_format",
+  "category": "curriculum-design",
+  "prompt": "Design a curriculum to teach a small base model (TinyLlama-1.1B) to follow Markdown formatting instructions in the user's request: when asked for a list, produce '- ' bullets; when asked for a table, produce a valid GFM table; when asked for code, wrap in ```lang fenced blocks. Output stages with (dataset, success criterion).",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "completeness", "points": 1, "description": "Covers prereqs + target + eval"},
+      {"id": "ordering",     "points": 1, "description": "Prereqs first"},
+      {"id": "specificity",  "points": 1, "description": "Names datasets / metrics"},
+      {"id": "plausibility", "points": 1, "description": "Would produce the capability"}
+    ]
+  },
+  "reference_solution": "Curriculum: teach TinyLlama-1.1B explicit Markdown formatting compliance.\n\nStage 1 - Format primitives.\n  Dataset: 30k (instruction, response) pairs where each response uses ONE primitive (bullet list, table, fenced code, blockquote). Source: hand-template-generated from 200 base templates.\n  Success: 95% format-token presence (per-primitive regex check) on 2k held-out.\n\nStage 2 - Instruction-grounded selection.\n  Dataset: 15k examples where the prompt explicitly asks for one specific format ('respond with a bulleted list', 'in a GFM table'). Source: subset of Open-Hermes-2.5 filtered for explicit format requests + augmentation.\n  Success: 90% correct-format selection on 1k held-out; 85% well-formed (GFM-parser-roundtrip).\n\nStage 3 - Mixed-format documents.\n  Dataset: 10k longer responses requiring multiple primitives (e.g. 'explain X, then list the 3 main points, then show a code example'). Source: hand-curated technical-writing examples + GPT-4 augmented.\n  Success: 80% structural similarity to reference (edit distance < 0.15 on document outline).\n\nStage 4 - Negative format avoidance.\n  Dataset: 5k 'plain prose only' examples where the user explicitly asks NOT to use lists or code blocks. Source: corrupt stage-3 with 'just plain text please' prefix.\n  Success: 95% no-format-primitive emission on these prompts.\n\nStage 5 - Held-out eval.\n  Dataset: 500 IFEval format-instruction examples + 500 hand-written new prompts.\n  Success: 75% IFEval format-following + 70% subjective-rater approval on 200 sampled hand-written.\n"
+}
