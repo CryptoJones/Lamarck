@@ -1,0 +1,14 @@
+{
+  "task_id": "cl_003_rope",
+  "category": "custom-layers",
+  "prompt": "Implement rotary positional embeddings as a function `apply_rope(x: torch.Tensor, positions: torch.Tensor, base: float = 10000.0) -> torch.Tensor`. `x` has shape (..., seq_len, head_dim) where head_dim is even. `positions` has shape (seq_len,) and gives the integer position for each token. Pair adjacent dims (x[..., 2i], x[..., 2i+1]) into 2D vectors and rotate each pair by angle theta_i = position / base ** (2i / head_dim). Return the rotated tensor with the same shape as the input.",
+  "rubric": {
+    "type": "unit-tests-binary",
+    "max_score": 1,
+    "criteria": [
+      {"id": "tests_pass", "points": 1, "description": "All pytest tests in unit_tests pass against the candidate implementation"}
+    ]
+  },
+  "reference_solution": "import torch\n\ndef apply_rope(x: torch.Tensor, positions: torch.Tensor, base: float = 10000.0) -> torch.Tensor:\n    head_dim = x.shape[-1]\n    assert head_dim % 2 == 0, 'head_dim must be even'\n    half = head_dim // 2\n    inv_freq = 1.0 / (base ** (torch.arange(0, half, device=x.device, dtype=x.dtype) * 2.0 / head_dim))\n    freqs = positions.to(x.dtype).unsqueeze(-1) * inv_freq  # (seq_len, half)\n    cos = freqs.cos().repeat_interleave(2, dim=-1)\n    sin = freqs.sin().repeat_interleave(2, dim=-1)\n    while cos.dim() < x.dim():\n        cos = cos.unsqueeze(0)\n        sin = sin.unsqueeze(0)\n    rotated = torch.stack([-x[..., 1::2], x[..., 0::2]], dim=-1).flatten(-2)\n    return x * cos + rotated * sin\n",
+  "unit_tests": "import torch\nfrom solution import apply_rope\n\ndef test_shape_unchanged():\n    x = torch.randn(2, 4, 6, 8)  # (B, H, L, D)\n    positions = torch.arange(6)\n    out = apply_rope(x, positions)\n    assert out.shape == x.shape\n\ndef test_position_zero_is_identity():\n    x = torch.randn(1, 1, 1, 8)\n    out = apply_rope(x, torch.zeros(1, dtype=torch.long))\n    assert torch.allclose(out, x, atol=1e-6)\n\ndef test_rotation_preserves_norm_within_each_pair():\n    torch.manual_seed(0)\n    x = torch.randn(2, 4, 8)  # (B, L, D)\n    positions = torch.arange(4)\n    out = apply_rope(x, positions)\n    in_pairs = x.reshape(2, 4, 4, 2).norm(dim=-1)\n    out_pairs = out.reshape(2, 4, 4, 2).norm(dim=-1)\n    assert torch.allclose(in_pairs, out_pairs, atol=1e-5)\n"
+}

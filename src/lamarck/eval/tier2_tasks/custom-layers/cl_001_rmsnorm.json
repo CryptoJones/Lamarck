@@ -1,0 +1,14 @@
+{
+  "task_id": "cl_001_rmsnorm",
+  "category": "custom-layers",
+  "prompt": "Implement RMSNorm as a torch.nn.Module class named `RMSNorm` WITHOUT using torch.nn.RMSNorm. Constructor: RMSNorm(dim: int, eps: float = 1e-6). Forward: applies root-mean-square normalization across the last dim and multiplies by a learnable gain parameter of shape (dim,). The gain must be a torch.nn.Parameter named `weight` initialized to ones.",
+  "rubric": {
+    "type": "unit-tests-binary",
+    "max_score": 1,
+    "criteria": [
+      {"id": "tests_pass", "points": 1, "description": "All pytest tests in unit_tests pass against the candidate implementation"}
+    ]
+  },
+  "reference_solution": "import torch\nimport torch.nn as nn\n\nclass RMSNorm(nn.Module):\n    def __init__(self, dim: int, eps: float = 1e-6):\n        super().__init__()\n        self.eps = eps\n        self.weight = nn.Parameter(torch.ones(dim))\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        rms = x.pow(2).mean(dim=-1, keepdim=True).add(self.eps).sqrt()\n        return self.weight * (x / rms)\n",
+  "unit_tests": "import torch\nimport torch.nn as nn\nfrom solution import RMSNorm\n\ndef test_shape_preserved():\n    rms = RMSNorm(dim=8)\n    x = torch.randn(2, 4, 8)\n    assert rms(x).shape == x.shape\n\ndef test_normalizes_to_unit_rms():\n    rms = RMSNorm(dim=16, eps=1e-12)\n    torch.manual_seed(0)\n    x = torch.randn(32, 16) * 5.0  # large scale\n    out = rms(x)\n    actual_rms = out.pow(2).mean(dim=-1).sqrt()\n    assert torch.allclose(actual_rms, torch.ones_like(actual_rms), atol=1e-4), actual_rms\n\ndef test_gain_is_learnable_parameter_named_weight():\n    rms = RMSNorm(dim=12)\n    assert isinstance(rms.weight, nn.Parameter)\n    assert rms.weight.requires_grad\n    assert rms.weight.shape == (12,)\n    assert torch.allclose(rms.weight, torch.ones(12))\n\ndef test_eps_prevents_div_by_zero():\n    rms = RMSNorm(dim=4, eps=1e-6)\n    x = torch.zeros(1, 4)\n    out = rms(x)\n    assert torch.isfinite(out).all()\n"
+}

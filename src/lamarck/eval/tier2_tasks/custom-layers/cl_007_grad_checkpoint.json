@@ -1,0 +1,14 @@
+{
+  "task_id": "cl_007_grad_checkpoint",
+  "category": "custom-layers",
+  "prompt": "Implement a gradient-checkpointing wrapper as a function `checkpoint(fn, *args, **kwargs) -> torch.Tensor`. It must produce the same forward output as `fn(*args, **kwargs)`, but during backward it should re-run `fn` to recompute activations rather than storing them. You may use torch.utils.checkpoint internally OR build it from torch.autograd.Function. The wrapper must work for fn returning a single torch.Tensor. Use_reentrant=False semantics are acceptable.",
+  "rubric": {
+    "type": "unit-tests-binary",
+    "max_score": 1,
+    "criteria": [
+      {"id": "tests_pass", "points": 1, "description": "All pytest tests in unit_tests pass against the candidate implementation"}
+    ]
+  },
+  "reference_solution": "import torch\nimport torch.utils.checkpoint as _ckpt\n\ndef checkpoint(fn, *args, **kwargs):\n    return _ckpt.checkpoint(fn, *args, use_reentrant=False, **kwargs)\n",
+  "unit_tests": "import torch\nfrom solution import checkpoint\n\ndef test_forward_output_matches_uncheckpointed():\n    torch.manual_seed(0)\n    def fn(x, w):\n        return (x * w).sum(dim=-1, keepdim=True).expand_as(x).contiguous().relu()\n    x = torch.randn(4, 8, requires_grad=True)\n    w = torch.randn(8, requires_grad=True)\n    ckpt_out = checkpoint(fn, x, w)\n    direct_out = fn(x, w)\n    assert torch.allclose(ckpt_out, direct_out, atol=1e-6)\n\ndef test_backward_produces_gradients():\n    torch.manual_seed(0)\n    def fn(x):\n        return (x ** 2).sum()\n    x = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)\n    out = checkpoint(fn, x)\n    out.backward()\n    assert x.grad is not None\n    assert torch.allclose(x.grad, 2 * x.detach(), atol=1e-6)\n\ndef test_backward_grads_match_uncheckpointed():\n    torch.manual_seed(0)\n    def fn(x, w):\n        return torch.sigmoid(x @ w).sum()\n    x = torch.randn(4, 8, requires_grad=True)\n    w = torch.randn(8, 8, requires_grad=True)\n    ckpt_loss = checkpoint(fn, x, w)\n    ckpt_loss.backward()\n    ckpt_grads = (x.grad.clone(), w.grad.clone())\n    x.grad = None\n    w.grad = None\n    direct_loss = fn(x, w)\n    direct_loss.backward()\n    assert torch.allclose(ckpt_grads[0], x.grad, atol=1e-5)\n    assert torch.allclose(ckpt_grads[1], w.grad, atol=1e-5)\n"
+}
