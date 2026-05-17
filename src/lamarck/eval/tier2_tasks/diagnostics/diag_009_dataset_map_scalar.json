@@ -1,0 +1,16 @@
+{
+  "task_id": "diag_009_dataset_map_scalar",
+  "category": "diagnostics",
+  "prompt": "The Dataset.map() call below raises before training even starts.\n```python\nfrom datasets import Dataset\nfrom transformers import AutoTokenizer\ntokenizer = AutoTokenizer.from_pretrained('TinyLlama/TinyLlama-1.1B-Chat-v1.0')\nds = Dataset.from_list([{'text': 'hello'}, {'text': 'world'}])\nds = ds.map(lambda b: tokenizer(b['text'])['input_ids'], batched=True, remove_columns=['text'])\n```\n\nTraceback:\n```\nArrowInvalid: Could not convert <class 'list'> with type list: tried to convert to a Mapping. Did you mean to use batched=True?\nTypeError: Provided `function` which is applied to all elements of table returns a list. Make sure provided function returns a dict.\n```",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "correct_root_cause",        "points": 1, "description": "Identifies the actual root cause, not a downstream symptom"},
+      {"id": "viable_fix",                "points": 1, "description": "Suggests a fix that would actually resolve it"},
+      {"id": "no_new_bug",                "points": 1, "description": "Does not introduce a new bug in the fix"},
+      {"id": "mechanistic_explanation",   "points": 1, "description": "Explains why the bug happened (mechanistic understanding)"}
+    ]
+  },
+  "reference_solution": "Root cause: Dataset.map() requires the mapping function to return a dict (or BatchEncoding, which is dict-like) so it can write the result back to columns. The lambda above returns `tokenizer(b['text'])['input_ids']` which is a list of token-id lists, NOT a dict.\n\nFix: return a dict mapping new column names to their batched values:\n```python\nds = ds.map(lambda b: {'input_ids': tokenizer(b['text'])['input_ids']},\n            batched=True, remove_columns=['text'])\n# or simpler: return the whole BatchEncoding from tokenizer (it's dict-like):\nds = ds.map(lambda b: tokenizer(b['text']), batched=True, remove_columns=['text'])\n```\nThe second form is the canonical pattern - tokenizer's BatchEncoding contains keys 'input_ids', 'attention_mask', (and 'token_type_ids' on some models) which all become columns on the dataset.\n\nMechanism: Hugging Face datasets are Apache Arrow tables under the hood. Each column has a name and a typed array. Dataset.map() uses the returned dict's keys as column names and the values as new column data. A raw list has no column-name metadata, so Arrow can't decide where to write it - it tries to coerce the list-of-lists into a Mapping and fails. The error message points the user at batched=True because the FIRST thing people get wrong here is batched mode with a single-example function; the second is the dict-vs-non-dict return. tokenizer's output is already a BatchEncoding (a dict subclass), so returning it directly is the path-of-least-friction."
+}

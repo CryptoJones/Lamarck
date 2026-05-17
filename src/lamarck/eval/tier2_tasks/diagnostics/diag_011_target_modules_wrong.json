@@ -1,0 +1,16 @@
+{
+  "task_id": "diag_011_target_modules_wrong",
+  "category": "diagnostics",
+  "prompt": "LoRA wrapping of Falcon-7B fails with the following error.\n```python\nfrom peft import LoraConfig, get_peft_model\nfrom transformers import AutoModelForCausalLM\n\nmodel = AutoModelForCausalLM.from_pretrained('tiiuae/falcon-7b-instruct',\n                                              trust_remote_code=True)\nlora = LoraConfig(r=16, lora_alpha=32, target_modules=['q_proj', 'v_proj'],\n                  task_type='CAUSAL_LM')\nmodel = get_peft_model(model, lora)\n```\n\nTraceback:\n```\nValueError: Target modules ['q_proj', 'v_proj'] not found in the base model. Please check the target modules and try again.\n```",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "correct_root_cause",        "points": 1, "description": "Identifies the actual root cause, not a downstream symptom"},
+      {"id": "viable_fix",                "points": 1, "description": "Suggests a fix that would actually resolve it"},
+      {"id": "no_new_bug",                "points": 1, "description": "Does not introduce a new bug in the fix"},
+      {"id": "mechanistic_explanation",   "points": 1, "description": "Explains why the bug happened (mechanistic understanding)"}
+    ]
+  },
+  "reference_solution": "Root cause: Falcon's attention block uses a single combined projection named `query_key_value` (a single linear layer that produces Q, K, V via channel slicing) rather than three separate `q_proj`/`k_proj`/`v_proj` linears that Llama-family models use. PEFT's target_modules string-match doesn't find anything named `q_proj` in the Falcon graph, so LoRA can't attach.\n\nFix: target Falcon's actual attention layer name:\n```python\nlora = LoraConfig(r=16, lora_alpha=32, target_modules=['query_key_value'],\n                  task_type='CAUSAL_LM')\n```\nA portable alternative is `target_modules='all-linear'`, which makes PEFT introspect the model graph and adapt every nn.Linear; works regardless of naming convention but produces a larger adapter (~3-5x the size of attention-only).\n\nMechanism: PEFT identifies modules to wrap by walking the model graph and matching layer names against the configured target_modules list. Most LLM families ship distinct q/k/v linears (Llama, Mistral, Phi, Qwen) so 'q_proj'/'v_proj' works. Falcon, BLOOM, and a handful of others use the fused QKV-as-one-linear pattern - reducing matmul overhead but breaking name-based matchers. The 'all-linear' fallback was added in peft 0.7+ specifically to paper over this fragmentation: it dynamically discovers all nn.Linear modules in the model. The trade-off: more adapter parameters, slightly slower training, but architectural portability."
+}
