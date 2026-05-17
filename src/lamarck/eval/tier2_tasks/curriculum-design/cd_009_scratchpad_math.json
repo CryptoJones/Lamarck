@@ -1,0 +1,16 @@
+{
+  "task_id": "cd_009_scratchpad_math",
+  "category": "curriculum-design",
+  "prompt": "Design a curriculum to teach a base model (Llama-3.2-1B - intentionally small) to use a scratchpad-style chain-of-thought for elementary-school arithmetic word problems. Output must show step-by-step working bracketed in <scratch>...</scratch> tags before the final answer in <answer>N</answer>. Output stages with (dataset, success criterion).",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "completeness", "points": 1, "description": "Covers prereqs + target + eval"},
+      {"id": "ordering",     "points": 1, "description": "Prereqs first"},
+      {"id": "specificity",  "points": 1, "description": "Names datasets / metrics"},
+      {"id": "plausibility", "points": 1, "description": "Would produce the capability"}
+    ]
+  },
+  "reference_solution": "Curriculum: teach Llama-3.2-1B scratchpad CoT for elementary arithmetic.\n\nStage 1 - Basic arithmetic fluency.\n  Dataset: 20k (problem, single-line-answer) for addition/subtraction within 100, then multiplication/division within 12x12. Source: programmatic generation.\n  Success: 95% accuracy on 500 single-op test set.\n\nStage 2 - Scratchpad format introduction.\n  Dataset: 15k (one-sentence-problem, <scratch>step1\\nstep2</scratch><answer>N</answer>) for simple two-op problems. Source: generate by templating stage-1 with structured working-out.\n  Success: 95% format-compliance (scratch + answer blocks present and well-formed) on 1k held-out; 85% answer-correctness.\n\nStage 3 - Word-problem variety.\n  Dataset: 8k GSM8K-easy subset (problems with answer <= 100 and <= 3 ops). Reformatted with the <scratch>/<answer> template.\n  Success: 70% accuracy on a 500-example word-problem eval; 90% format-compliance.\n\nStage 4 - Distractor-information robustness.\n  Dataset: 4k word problems augmented with 1-2 sentences of irrelevant information ('Alice has 5 apples. Her cousin lives in Seattle. She gives 2 to Bob...'). Reference scratchpad explicitly ignores distractors.\n  Success: accuracy maintained within 5pts of stage-3 baseline; distractor-mention-in-scratch <= 10%.\n\nStage 5 - Held-out eval.\n  Dataset: GSM8K test subset filtered to <= 3 ops and answer <= 1000 (~400 problems).\n  Success: 50% accuracy (Llama-3.2-1B base is ~25%); scratch-block present in 95% of responses.\n"
+}

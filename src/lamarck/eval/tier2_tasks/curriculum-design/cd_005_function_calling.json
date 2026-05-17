@@ -1,0 +1,16 @@
+{
+  "task_id": "cd_005_function_calling",
+  "category": "curriculum-design",
+  "prompt": "Design a curriculum to teach Llama-3.2-3B-Instruct to perform function-calling with structured arguments. Given a list of tool specs (name, description, JSON-schema for args) in the system prompt, the model must emit a tool_call with valid args when appropriate, or a normal text reply when no tool is needed. Output stages with (dataset, success criterion).",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "completeness", "points": 1, "description": "Covers prereqs + target + eval"},
+      {"id": "ordering",     "points": 1, "description": "Prereqs first"},
+      {"id": "specificity",  "points": 1, "description": "Names datasets / metrics"},
+      {"id": "plausibility", "points": 1, "description": "Would produce the capability"}
+    ]
+  },
+  "reference_solution": "Curriculum: teach Llama-3.2-3B-Instruct structured function-calling.\n\nStage 1 - JSON-mode prereq.\n  Dataset: 30k schema-conditioned JSON-only responses. Source: subset of cd_001 stage-2 output adapted to 3B size.\n  Success: 95% jsonschema.validate pass rate on a 1k eval.\n\nStage 2 - Tool-call format.\n  Dataset: 50k (system+user, assistant-tool-call) triples following Llama-3.2 chat template <|python_tag|>{...}<|eom_id|>. Source: glaive-function-calling-v2 + xLAM-function-calling-60k.\n  Success: 90% syntactic-template match on 500 held-out; 85% schema-validation of args.\n\nStage 3 - Tool selection from a menu.\n  Dataset: 25k examples with 3-10 available tools in the system prompt. Reference selects the correct tool or none. Source: ToolBench Mini + hand-curated decoy-tool augmentation.\n  Success: 80% correct-tool-selection on a 1k held-out; 90% no-tool-needed correctly identified.\n\nStage 4 - Negative / chit-chat refusal.\n  Dataset: 15k examples where no tool is needed (greetings, opinion questions, off-topic). Reference is a plain text reply, no tool call.\n  Success: <= 5% false-positive tool-calls on this set; chit-chat win-rate maintained at >= 60% vs stage-2 baseline.\n\nStage 5 - Multi-turn tool loops.\n  Dataset: 10k 3-turn conversations: user-asks -> assistant-calls-tool -> tool-result -> assistant-uses-result. Source: ToolBench full + synthesized.\n  Success: 75% end-to-end correct on a 500-example multi-turn eval (correct tool + correct args + correct final answer).\n\nStage 6 - Held-out BFCL eval.\n  Dataset: Berkeley Function Calling Leaderboard v3 held-out subset (~800 examples).\n  Success: overall BFCL score >= 60% (above Llama-3.2-3B base).\n"
+}
