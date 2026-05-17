@@ -15,8 +15,9 @@ Files here are checked in deliberately, by hand. Each one should:
 
 ## Current contents
 
-| File                                       | What it is                                                                                    |
+| Entry                                      | What it is                                                                                    |
 |--------------------------------------------|-----------------------------------------------------------------------------------------------|
 | `training-knowledge-from-archives.md`      | Mixed-corpus knowledge dump — Linux kernel 2.4 internals (Tigran Aivazian), GNOME-era systems content, older OS/dev material. Curated from Aaron's Obsidian vault as seed material for G0's curriculum-design rounds. |
+| `arxiv-ml/`                                | ~215k full-text arXiv ML papers, sourced from `armanc/scientific_papers` on HF. **Reproducible-from-script, not committed** — the corpus is ~30-50 GB expanded. See [`arxiv-ml/README.md`](arxiv-ml/README.md) for the fetch flow. |
 
 [`../curricula/`]: ../curricula/

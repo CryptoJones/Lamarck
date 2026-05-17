@@ -21,6 +21,11 @@ weights/
 curricula/*.jsonl
 !curricula/.gitkeep
 
+# arXiv corpus pull. Multi-GB; reproducible from the fetch script
+# in scripts/data_collection/. See seed-data/arxiv-ml/README.md.
+seed-data/arxiv-ml/full/
+seed-data/arxiv-ml/sample/
+
 # Eval suite cache + run outputs.
 .eval-cache/
 runs/
