@@ -1,0 +1,18 @@
+{
+  "task_id": "peft_008_qwen_toolcalls",
+  "category": "peft-loops",
+  "prompt": "QLoRA fine-tune Qwen/Qwen2-7B-Instruct on a tool-use dataset where each row at ./data/tools.jsonl has 'system', 'user', and 'assistant_tool_call' fields. Concatenate them as <|im_start|> conversation segments. Use 4-bit NF4 quantization. LoRA rank 16 alpha 32 on q_proj/k_proj/v_proj/o_proj. SFTTrainer, 2 epochs, batch size 2, gradient accumulation 4, lr 2e-4, bf16. Save to ./out/qwen-tools.",
+  "rubric": {
+    "type": "programmatic-6pt-ladder",
+    "max_score": 6,
+    "criteria": [
+      {"id": "parses",               "points": 1, "description": "Code parses with ast.parse"},
+      {"id": "imports",              "points": 1, "description": "Imports peft + transformers + trl"},
+      {"id": "lora_config",          "points": 1, "description": "Instantiates a LoraConfig"},
+      {"id": "trainer_train_called", "points": 1, "description": "Calls Trainer.train() or SFTTrainer.train()"},
+      {"id": "runs_to_completion",   "points": 1, "description": "Runs 1 epoch on 10 synthetic samples without raising"},
+      {"id": "adapter_loads",        "points": 1, "description": "Resulting adapter loads via PeftModel.from_pretrained"}
+    ]
+  },
+  "reference_solution": "from datasets import load_dataset\nfrom peft import LoraConfig, PeftModel, prepare_model_for_kbit_training\nfrom transformers import (AutoModelForCausalLM, AutoTokenizer,\n                          BitsAndBytesConfig)\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'Qwen/Qwen2-7B-Instruct'\nbnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type='nf4',\n                         bnb_4bit_compute_dtype='bfloat16')\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb,\n                                             device_map='auto')\nmodel = prepare_model_for_kbit_training(model)\n\nds = load_dataset('json', data_files='./data/tools.jsonl', split='train')\ndef fmt(r):\n    text = (\n        '<|im_start|>system\\n' + r['system'] + '<|im_end|>\\n' +\n        '<|im_start|>user\\n'   + r['user']   + '<|im_end|>\\n' +\n        '<|im_start|>assistant\\n' + r['assistant_tool_call'] + '<|im_end|>'\n    )\n    return {'text': text}\nds = ds.map(fmt)\n\nlora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,\n                  target_modules=['q_proj','k_proj','v_proj','o_proj'],\n                  bias='none', task_type='CAUSAL_LM')\nargs = SFTConfig(output_dir='./out/qwen-tools', per_device_train_batch_size=2,\n                 gradient_accumulation_steps=4, num_train_epochs=2,\n                 learning_rate=2e-4, bf16=True, save_strategy='no')\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds,\n                     peft_config=lora, tokenizer=tokenizer)\ntrainer.train()\ntrainer.model.save_pretrained('./out/qwen-tools')\n_ = PeftModel.from_pretrained(model, './out/qwen-tools')\n"
+}

@@ -1,0 +1,18 @@
+{
+  "task_id": "peft_009_tinyllama_conv",
+  "category": "peft-loops",
+  "prompt": "Fine-tune TinyLlama/TinyLlama-1.1B-Chat-v1.0 on a single-turn dialogue JSONL at ./data/dialogue.jsonl with 'user' and 'assistant' keys per row. Use a simple prompt template: 'USER: {user}\\nASSISTANT: {assistant}'. LoRA rank 4 alpha 8 on q_proj/v_proj (small adapter, this is a fast smoke run). SFTTrainer, 1 epoch, batch size 16, lr 3e-4. Save to ./out/tinyllama-conv.",
+  "rubric": {
+    "type": "programmatic-6pt-ladder",
+    "max_score": 6,
+    "criteria": [
+      {"id": "parses",               "points": 1, "description": "Code parses with ast.parse"},
+      {"id": "imports",              "points": 1, "description": "Imports peft + transformers + trl"},
+      {"id": "lora_config",          "points": 1, "description": "Instantiates a LoraConfig"},
+      {"id": "trainer_train_called", "points": 1, "description": "Calls Trainer.train() or SFTTrainer.train()"},
+      {"id": "runs_to_completion",   "points": 1, "description": "Runs 1 epoch on 10 synthetic samples without raising"},
+      {"id": "adapter_loads",        "points": 1, "description": "Resulting adapter loads via PeftModel.from_pretrained"}
+    ]
+  },
+  "reference_solution": "from datasets import load_dataset\nfrom peft import LoraConfig, PeftModel\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'TinyLlama/TinyLlama-1.1B-Chat-v1.0'\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(model_id)\n\nds = load_dataset('json', data_files='./data/dialogue.jsonl', split='train')\nds = ds.map(lambda r: {'text': f\"USER: {r['user']}\\nASSISTANT: {r['assistant']}\"})\n\nlora = LoraConfig(r=4, lora_alpha=8, lora_dropout=0.05,\n                  target_modules=['q_proj','v_proj'],\n                  bias='none', task_type='CAUSAL_LM')\nargs = SFTConfig(output_dir='./out/tinyllama-conv',\n                 per_device_train_batch_size=16, num_train_epochs=1,\n                 learning_rate=3e-4, save_strategy='no')\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds,\n                     peft_config=lora, tokenizer=tokenizer)\ntrainer.train()\ntrainer.model.save_pretrained('./out/tinyllama-conv')\n_ = PeftModel.from_pretrained(model, './out/tinyllama-conv')\n"
+}

@@ -1,0 +1,18 @@
+{
+  "task_id": "peft_005_gemma2b_qa",
+  "category": "peft-loops",
+  "prompt": "Fine-tune google/gemma-2-2b on a simple QA dataset where each row has 'question' and 'answer' columns. Source: the HF dataset 'rajpurkar/squad' (use the 'train' split, take the first 5000 examples). Format as 'Q: {question}\\nA: {answer}'. LoRA rank 8 alpha 16 on q_proj and v_proj. SFTTrainer, 1 epoch, batch size 4, lr 5e-5, bf16. Save to ./out/gemma-qa.",
+  "rubric": {
+    "type": "programmatic-6pt-ladder",
+    "max_score": 6,
+    "criteria": [
+      {"id": "parses",               "points": 1, "description": "Code parses with ast.parse"},
+      {"id": "imports",              "points": 1, "description": "Imports peft + transformers + trl"},
+      {"id": "lora_config",          "points": 1, "description": "Instantiates a LoraConfig"},
+      {"id": "trainer_train_called", "points": 1, "description": "Calls Trainer.train() or SFTTrainer.train()"},
+      {"id": "runs_to_completion",   "points": 1, "description": "Runs 1 epoch on 10 synthetic samples without raising"},
+      {"id": "adapter_loads",        "points": 1, "description": "Resulting adapter loads via PeftModel.from_pretrained"}
+    ]
+  },
+  "reference_solution": "from datasets import load_dataset\nfrom peft import LoraConfig, PeftModel\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'google/gemma-2-2b'\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype='bfloat16')\n\nds = load_dataset('rajpurkar/squad', split='train[:5000]')\ndef fmt(r):\n    ans = r['answers']['text'][0] if r['answers']['text'] else ''\n    return {'text': f\"Q: {r['question']}\\nA: {ans}\"}\nds = ds.map(fmt)\n\nlora = LoraConfig(r=8, lora_alpha=16, lora_dropout=0.05,\n                  target_modules=['q_proj','v_proj'],\n                  bias='none', task_type='CAUSAL_LM')\nargs = SFTConfig(output_dir='./out/gemma-qa',\n                 per_device_train_batch_size=4, num_train_epochs=1,\n                 learning_rate=5e-5, bf16=True, save_strategy='no')\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds,\n                     peft_config=lora, tokenizer=tokenizer)\ntrainer.train()\ntrainer.model.save_pretrained('./out/gemma-qa')\n_ = PeftModel.from_pretrained(model, './out/gemma-qa')\n"
+}

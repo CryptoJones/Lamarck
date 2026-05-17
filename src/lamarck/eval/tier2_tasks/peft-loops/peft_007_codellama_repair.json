@@ -1,0 +1,18 @@
+{
+  "task_id": "peft_007_codellama_repair",
+  "category": "peft-loops",
+  "prompt": "Fine-tune codellama/CodeLlama-7b-Instruct-hf on a code-repair dataset. Each row at ./data/repairs.jsonl has 'buggy' and 'fixed' Python snippets. Format as 'BUG:\\n{buggy}\\n\\nFIX:\\n{fixed}'. LoRA rank 16 alpha 32, applied to all-linear modules. SFTTrainer, 1 epoch, batch size 1, gradient accumulation 8, lr 1e-4, bf16. Save to ./out/codellama-repair.",
+  "rubric": {
+    "type": "programmatic-6pt-ladder",
+    "max_score": 6,
+    "criteria": [
+      {"id": "parses",               "points": 1, "description": "Code parses with ast.parse"},
+      {"id": "imports",              "points": 1, "description": "Imports peft + transformers + trl"},
+      {"id": "lora_config",          "points": 1, "description": "Instantiates a LoraConfig"},
+      {"id": "trainer_train_called", "points": 1, "description": "Calls Trainer.train() or SFTTrainer.train()"},
+      {"id": "runs_to_completion",   "points": 1, "description": "Runs 1 epoch on 10 synthetic samples without raising"},
+      {"id": "adapter_loads",        "points": 1, "description": "Resulting adapter loads via PeftModel.from_pretrained"}
+    ]
+  },
+  "reference_solution": "from datasets import load_dataset\nfrom peft import LoraConfig, PeftModel\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'codellama/CodeLlama-7b-Instruct-hf'\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype='bfloat16')\n\nds = load_dataset('json', data_files='./data/repairs.jsonl', split='train')\nds = ds.map(lambda r: {'text': f\"BUG:\\n{r['buggy']}\\n\\nFIX:\\n{r['fixed']}\"})\n\nlora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,\n                  target_modules='all-linear',\n                  bias='none', task_type='CAUSAL_LM')\nargs = SFTConfig(output_dir='./out/codellama-repair',\n                 per_device_train_batch_size=1,\n                 gradient_accumulation_steps=8, num_train_epochs=1,\n                 learning_rate=1e-4, bf16=True, save_strategy='no')\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds,\n                     peft_config=lora, tokenizer=tokenizer)\ntrainer.train()\ntrainer.model.save_pretrained('./out/codellama-repair')\n_ = PeftModel.from_pretrained(model, './out/codellama-repair')\n"
+}

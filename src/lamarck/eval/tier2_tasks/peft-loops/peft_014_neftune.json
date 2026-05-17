@@ -1,0 +1,18 @@
+{
+  "task_id": "peft_014_neftune",
+  "category": "peft-loops",
+  "prompt": "Fine-tune NousResearch/Llama-2-7b-hf with NEFTune noise tuning enabled (neftune_noise_alpha=5). Data: HF dataset 'tatsu-lab/alpaca', train split, first 2000 rows. Format as 'Instruction: {instruction}\\nResponse: {output}'. LoRA rank 8 alpha 16 on q_proj/v_proj. SFTTrainer, 1 epoch, batch size 4, lr 2e-4, bf16. Save to ./out/llama2-neftune.",
+  "rubric": {
+    "type": "programmatic-6pt-ladder",
+    "max_score": 6,
+    "criteria": [
+      {"id": "parses",               "points": 1, "description": "Code parses with ast.parse"},
+      {"id": "imports",              "points": 1, "description": "Imports peft + transformers + trl"},
+      {"id": "lora_config",          "points": 1, "description": "Instantiates a LoraConfig"},
+      {"id": "trainer_train_called", "points": 1, "description": "Calls Trainer.train() or SFTTrainer.train()"},
+      {"id": "runs_to_completion",   "points": 1, "description": "Runs 1 epoch on 10 synthetic samples without raising"},
+      {"id": "adapter_loads",        "points": 1, "description": "Resulting adapter loads via PeftModel.from_pretrained"}
+    ]
+  },
+  "reference_solution": "from datasets import load_dataset\nfrom peft import LoraConfig, PeftModel\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'NousResearch/Llama-2-7b-hf'\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype='bfloat16')\n\nds = load_dataset('tatsu-lab/alpaca', split='train[:2000]')\nds = ds.map(lambda r: {\n    'text': f\"Instruction: {r['instruction']}\\nResponse: {r['output']}\"\n})\n\nlora = LoraConfig(r=8, lora_alpha=16, lora_dropout=0.05,\n                  target_modules=['q_proj','v_proj'],\n                  bias='none', task_type='CAUSAL_LM')\nargs = SFTConfig(output_dir='./out/llama2-neftune',\n                 per_device_train_batch_size=4, num_train_epochs=1,\n                 learning_rate=2e-4, bf16=True,\n                 neftune_noise_alpha=5, save_strategy='no')\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds,\n                     peft_config=lora, tokenizer=tokenizer)\ntrainer.train()\ntrainer.model.save_pretrained('./out/llama2-neftune')\n_ = PeftModel.from_pretrained(model, './out/llama2-neftune')\n"
+}
