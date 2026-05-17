@@ -220,32 +220,16 @@ def load_holdout(path: Path | None = None) -> list[HoldoutProblem]:
 # ---- Pass-rate scoring (default) ------------------------------------------
 
 def _score_one(model_output: str, schema: dict[str, Any]) -> bool:
-    """Default per-problem scorer: does the model's output parse as
-    JSON AND validate against the schema?
+    """Per-problem scorer delegating to the L15 json_mode scorer.
 
-    Uses the optional ``jsonschema`` library if available; falls back
-    to "parse-and-must-be-a-dict" if not. L15 replaces this with the
-    canonical jsonschema validator when it lands.
+    Returns True iff the L15 scorer reports a pass. Importing inside
+    the function avoids a circular import: rubrics.json_mode imports
+    HoldoutProblem and InferenceFn from this module.
     """
-    try:
-        parsed = json.loads(model_output)
-    except (json.JSONDecodeError, ValueError):
-        return False
-    try:
-        from jsonschema import validate  # type: ignore[import-untyped]
-    except ImportError:
-        # Fallback: minimal type check.
-        expected_type = schema.get("type")
-        if expected_type == "object":
-            return isinstance(parsed, dict)
-        if expected_type == "array":
-            return isinstance(parsed, list)
-        return True
-    try:
-        validate(instance=parsed, schema=schema)
-    except Exception:  # noqa: BLE001 - jsonschema.ValidationError + friends
-        return False
-    return True
+    from .rubrics.json_mode import score_one_output
+
+    passed, _reason = score_one_output(model_output, schema)
+    return passed
 
 
 def _utc_now() -> str:
