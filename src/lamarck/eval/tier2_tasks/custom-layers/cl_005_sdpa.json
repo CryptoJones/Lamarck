@@ -1,0 +1,14 @@
+{
+  "task_id": "cl_005_sdpa",
+  "category": "custom-layers",
+  "prompt": "Implement scaled dot-product attention as a function `attention(q, k, v, mask=None) -> torch.Tensor` WITHOUT calling torch.nn.functional.scaled_dot_product_attention or any pre-built attention kernel. Inputs q, k, v have shape (B, H, L, D). Mask, if provided, has shape (B, 1, L_q, L_k) and is additive (large negative values where masked). Implement the canonical formula: softmax(q @ k.T / sqrt(D) + mask) @ v. Output shape: (B, H, L, D).",
+  "rubric": {
+    "type": "unit-tests-binary",
+    "max_score": 1,
+    "criteria": [
+      {"id": "tests_pass", "points": 1, "description": "All pytest tests in unit_tests pass against the candidate implementation"}
+    ]
+  },
+  "reference_solution": "import math\nimport torch\nimport torch.nn.functional as F\n\ndef attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,\n              mask: torch.Tensor | None = None) -> torch.Tensor:\n    d = q.shape[-1]\n    scores = q @ k.transpose(-2, -1) / math.sqrt(d)\n    if mask is not None:\n        scores = scores + mask\n    weights = F.softmax(scores, dim=-1)\n    return weights @ v\n",
+  "unit_tests": "import torch\nimport torch.nn.functional as F\nfrom solution import attention\n\ndef test_output_shape():\n    q = torch.randn(2, 4, 6, 16)\n    k = torch.randn(2, 4, 6, 16)\n    v = torch.randn(2, 4, 6, 16)\n    out = attention(q, k, v)\n    assert out.shape == q.shape\n\ndef test_matches_torch_sdpa_no_mask():\n    torch.manual_seed(0)\n    q = torch.randn(2, 4, 8, 16)\n    k = torch.randn(2, 4, 8, 16)\n    v = torch.randn(2, 4, 8, 16)\n    candidate = attention(q, k, v)\n    reference = F.scaled_dot_product_attention(q, k, v)\n    assert torch.allclose(candidate, reference, atol=1e-5)\n\ndef test_causal_mask_blocks_future():\n    torch.manual_seed(0)\n    B, H, L, D = 1, 1, 4, 8\n    q = torch.randn(B, H, L, D)\n    k = torch.randn(B, H, L, D)\n    v = torch.randn(B, H, L, D)\n    causal = torch.zeros(B, 1, L, L)\n    causal.masked_fill_(torch.triu(torch.ones(L, L), diagonal=1).bool(), float('-inf'))\n    candidate = attention(q, k, v, mask=causal)\n    reference = F.scaled_dot_product_attention(q, k, v, is_causal=True)\n    assert torch.allclose(candidate, reference, atol=1e-5)\n"
+}

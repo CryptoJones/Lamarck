@@ -1,0 +1,14 @@
+{
+  "task_id": "cl_002_swiglu",
+  "category": "custom-layers",
+  "prompt": "Implement a SwiGLU feed-forward block as a torch.nn.Module class named `SwiGLU`. Constructor: SwiGLU(in_dim: int, hidden_dim: int). Forward: y = (silu(W_gate @ x)) * (W_up @ x), then out = W_down @ y. Use three nn.Linear sub-modules named `gate_proj`, `up_proj`, `down_proj`, all without bias. `gate_proj` and `up_proj` map in_dim -> hidden_dim; `down_proj` maps hidden_dim -> in_dim.",
+  "rubric": {
+    "type": "unit-tests-binary",
+    "max_score": 1,
+    "criteria": [
+      {"id": "tests_pass", "points": 1, "description": "All pytest tests in unit_tests pass against the candidate implementation"}
+    ]
+  },
+  "reference_solution": "import torch\nimport torch.nn as nn\nimport torch.nn.functional as F\n\nclass SwiGLU(nn.Module):\n    def __init__(self, in_dim: int, hidden_dim: int):\n        super().__init__()\n        self.gate_proj = nn.Linear(in_dim, hidden_dim, bias=False)\n        self.up_proj   = nn.Linear(in_dim, hidden_dim, bias=False)\n        self.down_proj = nn.Linear(hidden_dim, in_dim, bias=False)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))\n",
+  "unit_tests": "import torch\nimport torch.nn as nn\nimport torch.nn.functional as F\nfrom solution import SwiGLU\n\ndef test_io_shape_round_trip():\n    block = SwiGLU(in_dim=16, hidden_dim=32)\n    x = torch.randn(4, 10, 16)\n    out = block(x)\n    assert out.shape == x.shape\n\ndef test_submodule_names_and_bias_flag():\n    block = SwiGLU(in_dim=8, hidden_dim=16)\n    for name in ('gate_proj', 'up_proj', 'down_proj'):\n        assert hasattr(block, name), f'missing sub-module: {name}'\n        lin = getattr(block, name)\n        assert isinstance(lin, nn.Linear)\n        assert lin.bias is None\n\ndef test_matches_explicit_swiglu_math():\n    torch.manual_seed(0)\n    block = SwiGLU(in_dim=4, hidden_dim=6)\n    x = torch.randn(2, 4)\n    out = block(x)\n    expected = block.down_proj(F.silu(block.gate_proj(x)) * block.up_proj(x))\n    assert torch.allclose(out, expected, atol=1e-6)\n"
+}

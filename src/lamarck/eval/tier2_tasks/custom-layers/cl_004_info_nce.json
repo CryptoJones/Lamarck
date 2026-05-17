@@ -1,0 +1,14 @@
+{
+  "task_id": "cl_004_info_nce",
+  "category": "custom-layers",
+  "prompt": "Implement an InfoNCE contrastive loss as a function `info_nce(anchors: torch.Tensor, positives: torch.Tensor, temperature: float = 0.07) -> torch.Tensor`. Both inputs have shape (batch, dim) and are L2-normalized inside the function before the dot product. The loss treats row i of `positives` as the positive sample for row i of `anchors`, and all other rows of `positives` as negatives. Compute cosine-similarity logits / temperature, then cross-entropy with target labels = [0, 1, ..., batch-1]. Return the mean loss as a scalar tensor.",
+  "rubric": {
+    "type": "unit-tests-binary",
+    "max_score": 1,
+    "criteria": [
+      {"id": "tests_pass", "points": 1, "description": "All pytest tests in unit_tests pass against the candidate implementation"}
+    ]
+  },
+  "reference_solution": "import torch\nimport torch.nn.functional as F\n\ndef info_nce(anchors: torch.Tensor, positives: torch.Tensor, temperature: float = 0.07) -> torch.Tensor:\n    a = F.normalize(anchors, dim=-1)\n    p = F.normalize(positives, dim=-1)\n    logits = (a @ p.T) / temperature\n    labels = torch.arange(a.size(0), device=a.device)\n    return F.cross_entropy(logits, labels)\n",
+  "unit_tests": "import math\nimport torch\nfrom solution import info_nce\n\ndef test_returns_scalar():\n    a = torch.randn(8, 16)\n    p = torch.randn(8, 16)\n    loss = info_nce(a, p)\n    assert loss.dim() == 0\n\ndef test_perfect_alignment_minimizes_loss():\n    torch.manual_seed(0)\n    x = torch.randn(32, 64)\n    # anchors == positives -> diagonal logits dominate\n    loss = info_nce(x, x.clone()).item()\n    assert loss < math.log(32), f'expected loss < ln(32)={math.log(32):.2f}, got {loss}'\n\ndef test_random_pairs_near_log_batch_size():\n    torch.manual_seed(0)\n    batch = 64\n    a = torch.randn(batch, 32)\n    p = torch.randn(batch, 32)\n    loss = info_nce(a, p, temperature=1.0).item()\n    # Loss for random pairs at temp=1 is around ln(batch).\n    assert abs(loss - math.log(batch)) < 1.0, loss\n\ndef test_temperature_changes_loss_magnitude():\n    torch.manual_seed(0)\n    a = torch.randn(16, 8)\n    p = torch.randn(16, 8)\n    l_hot = info_nce(a, p, temperature=0.01).item()\n    l_cold = info_nce(a, p, temperature=10.0).item()\n    assert l_hot != l_cold\n"
+}

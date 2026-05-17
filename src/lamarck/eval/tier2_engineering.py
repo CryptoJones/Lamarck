@@ -138,19 +138,20 @@ def default_tasks_dir() -> Path:
 
 
 def _read_task_file(path: Path) -> Task:
-    """Parse one task JSON file with the keys the v1 spec mandates."""
+    """Parse one task JSON file with the keys the v1 spec mandates.
+
+    Validates the five required keys but preserves any category-specific
+    extras the file declares (e.g. ``unit_tests`` for custom-layers
+    tasks, which the L8 runner reads to execute pytest against the
+    candidate's code). TypedDict ``Task`` tolerates extra keys at
+    runtime; the runner reads them by name.
+    """
     payload = json.loads(path.read_text())
     required = ("task_id", "category", "prompt", "rubric", "reference_solution")
     missing = [k for k in required if k not in payload]
     if missing:
         raise ValueError(f"task file {path} missing required keys: {missing}")
-    return Task(
-        task_id=payload["task_id"],
-        category=payload["category"],
-        prompt=payload["prompt"],
-        rubric=payload["rubric"],
-        reference_solution=payload["reference_solution"],
-    )
+    return payload  # type: ignore[return-value]
 
 
 def load_tasks(tasks_dir: Path | None = None) -> dict[str, list[Task]]:

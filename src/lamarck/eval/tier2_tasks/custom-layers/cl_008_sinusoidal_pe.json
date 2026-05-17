@@ -1,0 +1,14 @@
+{
+  "task_id": "cl_008_sinusoidal_pe",
+  "category": "custom-layers",
+  "prompt": "Implement sinusoidal positional encoding as a torch.nn.Module class `SinusoidalPositionalEncoding`. Constructor: SinusoidalPositionalEncoding(d_model: int, max_len: int = 5000). Forward takes a tensor of shape (B, L, d_model) and adds positional features. PE[pos, 2i] = sin(pos / 10000^(2i/d_model)), PE[pos, 2i+1] = cos(pos / 10000^(2i/d_model)). The positional encoding table must be registered as a buffer named `pe` of shape (max_len, d_model) - it is NOT learnable.",
+  "rubric": {
+    "type": "unit-tests-binary",
+    "max_score": 1,
+    "criteria": [
+      {"id": "tests_pass", "points": 1, "description": "All pytest tests in unit_tests pass against the candidate implementation"}
+    ]
+  },
+  "reference_solution": "import math\nimport torch\nimport torch.nn as nn\n\nclass SinusoidalPositionalEncoding(nn.Module):\n    def __init__(self, d_model: int, max_len: int = 5000):\n        super().__init__()\n        pe = torch.zeros(max_len, d_model)\n        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)\n        div_term = torch.exp(torch.arange(0, d_model, 2).float() *\n                             (-math.log(10000.0) / d_model))\n        pe[:, 0::2] = torch.sin(position * div_term)\n        pe[:, 1::2] = torch.cos(position * div_term)\n        self.register_buffer('pe', pe)\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        return x + self.pe[:x.size(1)].unsqueeze(0)\n",
+  "unit_tests": "import torch\nimport torch.nn as nn\nfrom solution import SinusoidalPositionalEncoding\n\ndef test_pe_buffer_shape():\n    spe = SinusoidalPositionalEncoding(d_model=8, max_len=100)\n    assert hasattr(spe, 'pe')\n    assert spe.pe.shape == (100, 8)\n\ndef test_pe_is_buffer_not_parameter():\n    spe = SinusoidalPositionalEncoding(d_model=4, max_len=10)\n    # Buffers don't appear in .parameters()\n    params = list(spe.parameters())\n    assert all(p.numel() == 0 or 'pe' not in name\n               for name, p in spe.named_parameters())\n    assert len(params) == 0\n    # But should appear in .buffers()\n    assert any('pe' in name for name, _ in spe.named_buffers())\n\ndef test_forward_adds_position():\n    spe = SinusoidalPositionalEncoding(d_model=4, max_len=10)\n    x = torch.zeros(2, 5, 4)\n    out = spe(x)\n    assert out.shape == x.shape\n    # Result equals the first 5 rows of pe broadcast over the batch.\n    expected = spe.pe[:5].unsqueeze(0).expand(2, 5, 4)\n    assert torch.allclose(out, expected, atol=1e-6)\n\ndef test_position_zero_first_pair():\n    spe = SinusoidalPositionalEncoding(d_model=8, max_len=10)\n    # PE[0, 0] = sin(0) = 0; PE[0, 1] = cos(0) = 1.\n    assert abs(spe.pe[0, 0].item() - 0.0) < 1e-6\n    assert abs(spe.pe[0, 1].item() - 1.0) < 1e-6\n"
+}

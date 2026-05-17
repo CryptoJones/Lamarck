@@ -1,0 +1,14 @@
+{
+  "task_id": "cl_009_prenorm",
+  "category": "custom-layers",
+  "prompt": "Implement a pre-norm transformer-style wrapper as a torch.nn.Module class `PreNorm`. Constructor: PreNorm(dim: int, sublayer: torch.nn.Module). The `sublayer` is stored under attribute `sublayer`; a LayerNorm(dim) is stored under attribute `norm`. Forward: `return x + sublayer(norm(x))` (the residual is added in the wrapper, not in the sublayer). The sublayer accepts and returns shape (..., dim).",
+  "rubric": {
+    "type": "unit-tests-binary",
+    "max_score": 1,
+    "criteria": [
+      {"id": "tests_pass", "points": 1, "description": "All pytest tests in unit_tests pass against the candidate implementation"}
+    ]
+  },
+  "reference_solution": "import torch\nimport torch.nn as nn\n\nclass PreNorm(nn.Module):\n    def __init__(self, dim: int, sublayer: nn.Module):\n        super().__init__()\n        self.norm = nn.LayerNorm(dim)\n        self.sublayer = sublayer\n\n    def forward(self, x: torch.Tensor) -> torch.Tensor:\n        return x + self.sublayer(self.norm(x))\n",
+  "unit_tests": "import torch\nimport torch.nn as nn\nfrom solution import PreNorm\n\ndef test_io_shape():\n    block = PreNorm(dim=8, sublayer=nn.Linear(8, 8))\n    x = torch.randn(4, 6, 8)\n    out = block(x)\n    assert out.shape == x.shape\n\ndef test_has_norm_and_sublayer_attrs():\n    inner = nn.Linear(4, 4)\n    block = PreNorm(dim=4, sublayer=inner)\n    assert isinstance(block.norm, nn.LayerNorm)\n    assert block.sublayer is inner\n\ndef test_residual_connection_is_present():\n    # If sublayer returns zeros, output should equal input (residual identity).\n    class Zeroer(nn.Module):\n        def forward(self, x): return torch.zeros_like(x)\n    block = PreNorm(dim=8, sublayer=Zeroer())\n    x = torch.randn(2, 8)\n    out = block(x)\n    assert torch.allclose(out, x, atol=1e-6)\n\ndef test_norm_is_applied_before_sublayer():\n    # If sublayer is identity, output should be x + LayerNorm(x).\n    block = PreNorm(dim=8, sublayer=nn.Identity())\n    x = torch.randn(3, 8)\n    out = block(x)\n    expected = x + block.norm(x)\n    assert torch.allclose(out, expected, atol=1e-6)\n"
+}
