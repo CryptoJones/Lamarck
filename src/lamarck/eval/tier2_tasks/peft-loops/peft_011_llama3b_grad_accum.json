@@ -1,0 +1,18 @@
+{
+  "task_id": "peft_011_llama3b_grad_accum",
+  "category": "peft-loops",
+  "prompt": "Fine-tune meta-llama/Llama-3.2-3B-Instruct on the HF dataset 'HuggingFaceH4/ultrachat_200k', train_sft split, first 10000 rows. Use the tokenizer's chat template to format each conversation. LoRA rank 16 alpha 32 on q_proj/k_proj/v_proj/o_proj. SFTTrainer, 1 epoch, batch size 2, gradient accumulation 8 (effective batch 16), lr 2e-4, bf16, warmup_ratio=0.05, lr_scheduler_type='cosine'. Save to ./out/llama3b-ultra.",
+  "rubric": {
+    "type": "programmatic-6pt-ladder",
+    "max_score": 6,
+    "criteria": [
+      {"id": "parses",               "points": 1, "description": "Code parses with ast.parse"},
+      {"id": "imports",              "points": 1, "description": "Imports peft + transformers + trl"},
+      {"id": "lora_config",          "points": 1, "description": "Instantiates a LoraConfig"},
+      {"id": "trainer_train_called", "points": 1, "description": "Calls Trainer.train() or SFTTrainer.train()"},
+      {"id": "runs_to_completion",   "points": 1, "description": "Runs 1 epoch on 10 synthetic samples without raising"},
+      {"id": "adapter_loads",        "points": 1, "description": "Resulting adapter loads via PeftModel.from_pretrained"}
+    ]
+  },
+  "reference_solution": "from datasets import load_dataset\nfrom peft import LoraConfig, PeftModel\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'meta-llama/Llama-3.2-3B-Instruct'\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype='bfloat16')\n\nds = load_dataset('HuggingFaceH4/ultrachat_200k', split='train_sft[:10000]')\nds = ds.map(lambda r: {'text': tokenizer.apply_chat_template(\n    r['messages'], tokenize=False, add_generation_prompt=False)})\n\nlora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,\n                  target_modules=['q_proj','k_proj','v_proj','o_proj'],\n                  bias='none', task_type='CAUSAL_LM')\nargs = SFTConfig(output_dir='./out/llama3b-ultra',\n                 per_device_train_batch_size=2,\n                 gradient_accumulation_steps=8, num_train_epochs=1,\n                 learning_rate=2e-4, bf16=True, warmup_ratio=0.05,\n                 lr_scheduler_type='cosine', save_strategy='no')\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds,\n                     peft_config=lora, tokenizer=tokenizer)\ntrainer.train()\ntrainer.model.save_pretrained('./out/llama3b-ultra')\n_ = PeftModel.from_pretrained(model, './out/llama3b-ultra')\n"
+}

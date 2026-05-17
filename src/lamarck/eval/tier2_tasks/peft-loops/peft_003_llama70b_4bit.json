@@ -1,0 +1,18 @@
+{
+  "task_id": "peft_003_llama70b_4bit",
+  "category": "peft-loops",
+  "prompt": "Write a QLoRA training script for meta-llama/Llama-3.1-70B-Instruct. Use 4-bit NF4 with double quantization, bf16 compute dtype, gradient checkpointing enabled. LoRA: rank 32, alpha 64, target_modules covering q/k/v/o projections and gate/up/down projections. Use TRL SFTTrainer on a JSONL at ./data/curriculum.jsonl with a single 'text' column. 1 epoch, per-device batch 1, gradient accumulation 16, learning rate 1e-4, paged_adamw_32bit optimizer. Save adapter to ./out/lamarck-g1.",
+  "rubric": {
+    "type": "programmatic-6pt-ladder",
+    "max_score": 6,
+    "criteria": [
+      {"id": "parses",               "points": 1, "description": "Code parses with ast.parse"},
+      {"id": "imports",              "points": 1, "description": "Imports peft + transformers + trl"},
+      {"id": "lora_config",          "points": 1, "description": "Instantiates a LoraConfig"},
+      {"id": "trainer_train_called", "points": 1, "description": "Calls Trainer.train() or SFTTrainer.train()"},
+      {"id": "runs_to_completion",   "points": 1, "description": "Runs 1 epoch on 10 synthetic samples without raising"},
+      {"id": "adapter_loads",        "points": 1, "description": "Resulting adapter loads via PeftModel.from_pretrained"}
+    ]
+  },
+  "reference_solution": "from datasets import load_dataset\nfrom peft import LoraConfig, PeftModel, prepare_model_for_kbit_training\nfrom transformers import (AutoModelForCausalLM, AutoTokenizer,\n                          BitsAndBytesConfig)\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'meta-llama/Llama-3.1-70B-Instruct'\nbnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type='nf4',\n                         bnb_4bit_use_double_quant=True,\n                         bnb_4bit_compute_dtype='bfloat16')\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=bnb,\n                                             device_map='auto')\nmodel = prepare_model_for_kbit_training(model)\nmodel.gradient_checkpointing_enable()\n\nds = load_dataset('json', data_files='./data/curriculum.jsonl', split='train')\n\nlora = LoraConfig(r=32, lora_alpha=64, lora_dropout=0.05,\n                  target_modules=['q_proj','k_proj','v_proj','o_proj',\n                                  'gate_proj','up_proj','down_proj'],\n                  bias='none', task_type='CAUSAL_LM')\nargs = SFTConfig(output_dir='./out/lamarck-g1', per_device_train_batch_size=1,\n                 gradient_accumulation_steps=16, num_train_epochs=1,\n                 learning_rate=1e-4, bf16=True, optim='paged_adamw_32bit',\n                 save_strategy='no')\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds,\n                     peft_config=lora, tokenizer=tokenizer)\ntrainer.train()\ntrainer.model.save_pretrained('./out/lamarck-g1')\n_ = PeftModel.from_pretrained(model, './out/lamarck-g1')\n"
+}

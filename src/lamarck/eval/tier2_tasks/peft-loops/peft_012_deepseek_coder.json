@@ -1,0 +1,18 @@
+{
+  "task_id": "peft_012_deepseek_coder",
+  "category": "peft-loops",
+  "prompt": "Fine-tune deepseek-ai/deepseek-coder-6.7b-instruct on a Python function-completion dataset. Source: ./data/funcs.jsonl with 'docstring' and 'body' keys. Format as a Python function template: 'def f():\\n    \"\"\"{docstring}\"\"\"\\n{body}'. LoRA rank 24 alpha 48 on q_proj/k_proj/v_proj/o_proj plus gate_proj/up_proj/down_proj. SFTTrainer, 1 epoch, batch size 1, grad accumulation 8, lr 1e-4, bf16. Save to ./out/dsc-funcs.",
+  "rubric": {
+    "type": "programmatic-6pt-ladder",
+    "max_score": 6,
+    "criteria": [
+      {"id": "parses",               "points": 1, "description": "Code parses with ast.parse"},
+      {"id": "imports",              "points": 1, "description": "Imports peft + transformers + trl"},
+      {"id": "lora_config",          "points": 1, "description": "Instantiates a LoraConfig"},
+      {"id": "trainer_train_called", "points": 1, "description": "Calls Trainer.train() or SFTTrainer.train()"},
+      {"id": "runs_to_completion",   "points": 1, "description": "Runs 1 epoch on 10 synthetic samples without raising"},
+      {"id": "adapter_loads",        "points": 1, "description": "Resulting adapter loads via PeftModel.from_pretrained"}
+    ]
+  },
+  "reference_solution": "from datasets import load_dataset\nfrom peft import LoraConfig, PeftModel\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'deepseek-ai/deepseek-coder-6.7b-instruct'\ntokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(\n    model_id, torch_dtype='bfloat16', trust_remote_code=True)\n\nds = load_dataset('json', data_files='./data/funcs.jsonl', split='train')\nds = ds.map(lambda r: {\n    'text': f'def f():\\n    \"\"\"{r[\"docstring\"]}\"\"\"\\n{r[\"body\"]}'\n})\n\nlora = LoraConfig(r=24, lora_alpha=48, lora_dropout=0.05,\n                  target_modules=['q_proj','k_proj','v_proj','o_proj',\n                                  'gate_proj','up_proj','down_proj'],\n                  bias='none', task_type='CAUSAL_LM')\nargs = SFTConfig(output_dir='./out/dsc-funcs',\n                 per_device_train_batch_size=1,\n                 gradient_accumulation_steps=8, num_train_epochs=1,\n                 learning_rate=1e-4, bf16=True, save_strategy='no')\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds,\n                     peft_config=lora, tokenizer=tokenizer)\ntrainer.train()\ntrainer.model.save_pretrained('./out/dsc-funcs')\n_ = PeftModel.from_pretrained(model, './out/dsc-funcs')\n"
+}
