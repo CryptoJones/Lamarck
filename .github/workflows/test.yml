@@ -1,0 +1,43 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Lamarck (no GPU deps)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run pytest
+        run: pytest -q
+
+      - name: Smoke-run the mock eval pipeline
+        env:
+          PYTHON: python
+        run: |
+          bash scripts/eval/run-all.sh lamarck-ci-mock \
+              http://stub /dev/null --mock --out-dir ./eval-ci-out
+          test -s ./eval-ci-out/tier1.json
+          test -s ./eval-ci-out/tier2.json
+          test -s ./eval-ci-out/tier3.json
+          test -s ./eval-ci-out/final.json
+          python -c "import json,sys; \
+            f=json.load(open('./eval-ci-out/final.json')); \
+            sys.exit(0 if f['final_score']==57.0 else \
+                     f\"final_score={f['final_score']} expected 57.0\")"
