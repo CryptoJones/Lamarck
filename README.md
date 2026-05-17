@@ -113,8 +113,13 @@ for G1 is shaped over training rounds to produce better G2s.
 
 ## Status
 
-**Scaffold only.** Repo, design doc, base-model choice, scope
-boundaries. Nothing trains yet.
+**Scaffold + RunPod pipeline (M1 in progress).** The training +
+serving scripts are written but no generation has actually been
+trained on a pod yet.
+
+See [`docs/runpod-workflow.md`](docs/runpod-workflow.md) for the
+operator playbook (spin up A100, run `RUN_LAMARCK.sh`, SSH-tunnel
+to localhost:8000, point Hermes at the tunnel).
 
 | Milestone | Description                                                  | Status |
 |-----------|--------------------------------------------------------------|--------|
