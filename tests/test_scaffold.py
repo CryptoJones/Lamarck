@@ -24,10 +24,3 @@ def test_g0_is_deepseek_r1_distill_llama_70b():
     constant change.
     """
     assert lamarck.G0_MODEL_ID == "deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
-
-
-def test_generation_cap_is_three():
-    """The generation cap is a safety boundary, not a magic number.
-    Raising it requires DESIGN.md updates first.
-    """
-    assert lamarck.MAX_GENERATIONS == 3

@@ -124,7 +124,7 @@ boundaries. Nothing trains yet.
 | M3        | G0 → G1 single training round (QLoRA on RunPod)              | planned |
 | M4        | G1 → G2 single training round + first G2 eval                | planned |
 | M5        | Curriculum search loop (multiple G0 rounds, each with a new G1/G2 pair) | planned |
-| M6        | Generation-3 reach test (does the recursion hold?)           | speculative |
+| M6        | Multi-generation reach test (does the recursion hold past G2?) | speculative |
 
 ---
 
@@ -145,9 +145,9 @@ suite) are intentional, not aspirational:
   and the optimization pressure doesn't reinforce it.
 - **Human review between generations.** No automated G_N → G_{N+1}
   pipeline. Each transition is a human-launched RunPod pod with a
-  documented spec.
-- **Generation cap = 3** for now. Whether the setup actually has
-  to be cut off earlier is itself one of the research questions.
+  documented spec. This *is* the cap — there's no hardcoded
+  generation counter, so the recursion continues exactly as long
+  as a human keeps deciding to launch the next pod.
 
 See [`DESIGN.md`](DESIGN.md) for the safety section in detail.
 
