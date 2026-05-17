@@ -1,0 +1,16 @@
+{
+  "task_id": "diag_014_lr_no_warmup",
+  "category": "diagnostics",
+  "prompt": "Training a Llama-3.1-8B QLoRA on a 50k-row instruction dataset. Loss drops smoothly for the first few steps then plateaus high at 1.6 and never improves. Validation accuracy on a held-out 1k subset never exceeds the pretrained-base baseline. Script:\n```python\nargs = SFTConfig(output_dir='./out',\n                 per_device_train_batch_size=4,\n                 gradient_accumulation_steps=4,\n                 num_train_epochs=2,\n                 learning_rate=2e-4,\n                 bf16=True,\n                 lr_scheduler_type='constant',\n                 max_seq_length=2048)\n```\n(LoraConfig: r=16, alpha=32, target_modules=q_proj+v_proj, dropout=0.05.)",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "correct_root_cause",        "points": 1, "description": "Identifies the actual root cause, not a downstream symptom"},
+      {"id": "viable_fix",                "points": 1, "description": "Suggests a fix that would actually resolve it"},
+      {"id": "no_new_bug",                "points": 1, "description": "Does not introduce a new bug in the fix"},
+      {"id": "mechanistic_explanation",   "points": 1, "description": "Explains why the bug happened (mechanistic understanding)"}
+    ]
+  },
+  "reference_solution": "Root cause: `lr_scheduler_type='constant'` with `learning_rate=2e-4` and no warmup. The first few mini-batches produce extra-large gradient updates that move the LoRA params past the local optimum; the constant LR then can't decay to refine the solution. The plateau-at-1.6 pattern is the classic 'oscillating around a high-loss attractor' signature of too-high constant LR on QLoRA.\n\nFix: switch to a cosine schedule with warmup:\n```python\nargs = SFTConfig(...,\n                 learning_rate=2e-4,\n                 lr_scheduler_type='cosine',\n                 warmup_ratio=0.03,\n                 weight_decay=0.0,  # LoRA typically wants 0 WD\n                 ...)\n```\nThis ramps LR linearly from 0 to 2e-4 over the first 3% of steps, then anneals to 0 by the end. The warmup keeps early gradients bounded; the cosine decay allows fine-tuning near the optimum in the back half of training.\n\nMechanism: SGD/Adam updates have magnitude proportional to LR. With cold-started LoRA layers (their A is Kaiming-uniform, B is zero), the first few backward passes route large gradients through the unfrozen path. A constant 2e-4 step + Adam's momentum buffers means the first updates overshoot; without a decay schedule, the optimizer can only oscillate in a basin around the optimum rather than settle into it. Warmup specifically prevents the first-step blowup; cosine decay specifically allows refinement. The Lamarck recipe and the QLoRA paper both use linear-warmup + cosine-decay as the default for this exact reason."
+}

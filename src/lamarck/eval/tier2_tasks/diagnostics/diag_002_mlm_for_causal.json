@@ -1,0 +1,16 @@
+{
+  "task_id": "diag_002_mlm_for_causal",
+  "category": "diagnostics",
+  "prompt": "Training runs end-to-end without crashing, but the loss stays at ~7.5 for thousands of steps and the model produces gibberish after the run. The script is below. Identify the root cause and propose a fix.\n\nScript:\n```python\nfrom datasets import load_dataset\nfrom transformers import (AutoModelForCausalLM, AutoTokenizer,\n                          DataCollatorForLanguageModeling, Trainer, TrainingArguments)\n\nmodel_id = 'TinyLlama/TinyLlama-1.1B-Chat-v1.0'\ntokenizer = AutoTokenizer.from_pretrained(model_id)\ntokenizer.pad_token = tokenizer.eos_token\nmodel = AutoModelForCausalLM.from_pretrained(model_id)\nds = load_dataset('wikitext', 'wikitext-2-raw-v1', split='train[:1000]')\nds = ds.map(lambda b: tokenizer(b['text'], truncation=True, max_length=512),\n            batched=True, remove_columns=['text'])\ncollator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)\nargs = TrainingArguments(output_dir='./out', per_device_train_batch_size=4,\n                         num_train_epochs=1, learning_rate=5e-5)\ntrainer = Trainer(model=model, args=args, train_dataset=ds,\n                  data_collator=collator, tokenizer=tokenizer)\ntrainer.train()\n```\nNo traceback - training completes, but the loss is flat and outputs are garbage.",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "correct_root_cause",        "points": 1, "description": "Identifies the actual root cause, not a downstream symptom"},
+      {"id": "viable_fix",                "points": 1, "description": "Suggests a fix that would actually resolve it"},
+      {"id": "no_new_bug",                "points": 1, "description": "Does not introduce a new bug in the fix"},
+      {"id": "mechanistic_explanation",   "points": 1, "description": "Explains why the bug happened (mechanistic understanding)"}
+    ]
+  },
+  "reference_solution": "Root cause: the DataCollatorForLanguageModeling was instantiated with `mlm=True`, which masks 15% of tokens for masked-language-modeling. But TinyLlama is a CAUSAL language model (AutoModelForCausalLM). Causal LMs are trained to predict the NEXT token given previous tokens; they don't have a [MASK] head and they ignore the masking labels MLM produces. The model is effectively training on no useful signal.\n\nFix: pass `mlm=False`:\n```python\ncollator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)\n```\nThis switches the collator to produce next-token-prediction labels (labels = input_ids shifted by one, with -100 for padded positions), which is what AutoModelForCausalLM expects.\n\nMechanism: DataCollatorForLanguageModeling is dual-purpose. With mlm=True, it replaces 15% of tokens with [MASK] and uses those as targets - this is the BERT-style training objective. With mlm=False, it produces causal-LM labels via simple shifting. AutoModelForCausalLM's loss head computes cross-entropy on the shifted labels; it has no mechanism for [MASK]-token prediction. Loss stays at ~ln(vocab_size) because the model can only guess randomly at the masked positions."
+}

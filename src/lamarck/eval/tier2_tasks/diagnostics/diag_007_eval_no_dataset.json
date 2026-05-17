@@ -1,0 +1,16 @@
+{
+  "task_id": "diag_007_eval_no_dataset",
+  "category": "diagnostics",
+  "prompt": "Training crashes the first time the eval cadence fires. Script:\n```python\nfrom transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments\nfrom datasets import Dataset\n\nmodel = AutoModelForCausalLM.from_pretrained('TinyLlama/TinyLlama-1.1B-Chat-v1.0')\ntokenizer = AutoTokenizer.from_pretrained('TinyLlama/TinyLlama-1.1B-Chat-v1.0')\ntokenizer.pad_token = tokenizer.eos_token\ntrain = Dataset.from_list([{'input_ids': tokenizer.encode(f'x {i}'),\n                            'labels': tokenizer.encode(f'x {i}')} for i in range(64)])\nargs = TrainingArguments(output_dir='./out', per_device_train_batch_size=2,\n                         num_train_epochs=1, evaluation_strategy='steps',\n                         eval_steps=10)\ntrainer = Trainer(model=model, args=args, train_dataset=train, tokenizer=tokenizer)\ntrainer.train()\n```\n\nTraceback:\n```\nValueError: Trainer: evaluation requires an eval_dataset.\n```",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "correct_root_cause",        "points": 1, "description": "Identifies the actual root cause, not a downstream symptom"},
+      {"id": "viable_fix",                "points": 1, "description": "Suggests a fix that would actually resolve it"},
+      {"id": "no_new_bug",                "points": 1, "description": "Does not introduce a new bug in the fix"},
+      {"id": "mechanistic_explanation",   "points": 1, "description": "Explains why the bug happened (mechanistic understanding)"}
+    ]
+  },
+  "reference_solution": "Root cause: `evaluation_strategy='steps'` with `eval_steps=10` tells Trainer to run evaluation every 10 steps, but no `eval_dataset` was passed to Trainer(). The error fires the first time the eval callback tries to iterate an eval dataloader.\n\nFix: choose one of three approaches.\n  (a) If you want eval, split the train data and pass an eval set:\n```python\nsplit = train.train_test_split(test_size=0.1, seed=42)\ntrainer = Trainer(model=model, args=args,\n                  train_dataset=split['train'],\n                  eval_dataset=split['test'],\n                  tokenizer=tokenizer)\n```\n  (b) If you don't want eval, switch off the strategy:\n```python\nargs = TrainingArguments(output_dir='./out', per_device_train_batch_size=2,\n                         num_train_epochs=1, evaluation_strategy='no')\n```\n  (c) The minimal-change fix is to delete `evaluation_strategy='steps', eval_steps=10` - that defaults to 'no'.\n\nMechanism: Trainer wires evaluation_strategy into a TrainerCallback that fires on the scheduled step. The strategy and the eval_dataset must agree: 'steps'/'epoch' both REQUIRE eval_dataset; 'no' tolerates None. The error is fail-loud at first-fire rather than fail-silent (e.g. skipping eval), which is the right default - silently skipping requested evals would hide configuration mistakes in long training runs."
+}

@@ -1,0 +1,16 @@
+{
+  "task_id": "diag_006_flash_attn_wrong_gpu",
+  "category": "diagnostics",
+  "prompt": "Loading the model fails with the following error on a T4 GPU pod. Script and traceback below.\n\n```python\nfrom transformers import AutoModelForCausalLM\nmodel = AutoModelForCausalLM.from_pretrained('mistralai/Mistral-7B-Instruct-v0.3',\n                                              torch_dtype='bfloat16',\n                                              attn_implementation='flash_attention_2')\n```\n\nTraceback:\n```\nValueError: FlashAttention only supports Ampere GPUs or newer.\n```",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "correct_root_cause",        "points": 1, "description": "Identifies the actual root cause, not a downstream symptom"},
+      {"id": "viable_fix",                "points": 1, "description": "Suggests a fix that would actually resolve it"},
+      {"id": "no_new_bug",                "points": 1, "description": "Does not introduce a new bug in the fix"},
+      {"id": "mechanistic_explanation",   "points": 1, "description": "Explains why the bug happened (mechanistic understanding)"}
+    ]
+  },
+  "reference_solution": "Root cause: FlashAttention-2 requires GPUs with Ampere architecture or newer (sm_80+) - that's A100, A10, RTX-30/40 series, H100, etc. The T4 is Turing architecture (sm_75) and lacks the tensor-core primitives FA2's kernels depend on. The check fails at model-load time during the attention-implementation dispatch.\n\nFix: pick an attention implementation supported on the available hardware. For Turing-class GPUs:\n```python\nmodel = AutoModelForCausalLM.from_pretrained('mistralai/Mistral-7B-Instruct-v0.3',\n                                              torch_dtype='float16',\n                                              attn_implementation='sdpa')\n```\nNote two changes: (1) `attn_implementation='sdpa'` uses PyTorch's built-in scaled-dot-product-attention which has math/mem-efficient kernels supported on Turing+; (2) `torch_dtype='float16'` because T4 has limited bf16 support - fp16 is the practical dtype on Turing. If you must use bf16, fall back to `attn_implementation='eager'` and accept the speed/memory hit.\n\nMechanism: FlashAttention kernels are hand-tuned CUDA C++ that uses Ampere's larger shared-memory + asynchronous-copy instructions to fuse softmax with the matmul, dramatically reducing HBM bandwidth pressure. Those instructions don't exist on pre-Ampere GPUs. PyTorch's SDPA implementation includes a memory-efficient kernel (Xformers-derived) that gives ~70% of FA2's speedup on supported hardware and works on Turing+ via tensor-cores. For a CI / smoke-test pod, sdpa is the right default; for production training, ensure the pod is Ampere or newer."
+}

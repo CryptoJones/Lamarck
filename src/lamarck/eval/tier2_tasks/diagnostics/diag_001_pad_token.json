@@ -1,0 +1,16 @@
+{
+  "task_id": "diag_001_pad_token",
+  "category": "diagnostics",
+  "prompt": "The following training script crashes during the first forward pass with the traceback below. Identify the root cause and propose a fix.\n\nScript:\n```python\nfrom datasets import Dataset\nfrom transformers import AutoModelForCausalLM, AutoTokenizer\nfrom trl import SFTConfig, SFTTrainer\n\nmodel_id = 'meta-llama/Llama-3.1-8B-Instruct'\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nmodel = AutoModelForCausalLM.from_pretrained(model_id)\nds = Dataset.from_list([{'text': f'hello {i}'} for i in range(10)])\nargs = SFTConfig(output_dir='./out', num_train_epochs=1, per_device_train_batch_size=2)\ntrainer = SFTTrainer(model=model, args=args, train_dataset=ds, tokenizer=tokenizer)\ntrainer.train()\n```\n\nTraceback:\n```\nValueError: Asking to pad but the tokenizer does not have a padding token. Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` or add a new pad token via `tokenizer.add_special_tokens({'pad_token': '[PAD]'})`.\n```",
+  "rubric": {
+    "type": "llm-judge-4axis",
+    "max_score": 4,
+    "criteria": [
+      {"id": "correct_root_cause",        "points": 1, "description": "Identifies the actual root cause, not a downstream symptom"},
+      {"id": "viable_fix",                "points": 1, "description": "Suggests a fix that would actually resolve it"},
+      {"id": "no_new_bug",                "points": 1, "description": "Does not introduce a new bug in the fix"},
+      {"id": "mechanistic_explanation",   "points": 1, "description": "Explains why the bug happened (mechanistic understanding)"}
+    ]
+  },
+  "reference_solution": "Root cause: Llama-3.1's tokenizer ships without a `pad_token` (Llama models use causal LM and don't pad by default). When SFTTrainer tries to batch-pad samples in the collator, it raises ValueError because there is no pad token to write.\n\nFix: after loading the tokenizer, alias the EOS token as the pad token:\n```python\ntokenizer = AutoTokenizer.from_pretrained(model_id)\nif tokenizer.pad_token is None:\n    tokenizer.pad_token = tokenizer.eos_token\n```\nThis is the canonical Llama workaround. Don't add a NEW pad token via add_special_tokens unless you also resize the model's embedding matrix - doing that without resize_token_embeddings creates a separate, equally bad bug.\n\nMechanism: HuggingFace's data collator decides padding strategy at batch-build time. With batch_size > 1 and variable-length sequences, it must pad shorter sequences up to the longest in the batch. Llama tokenizer has pad_token=None because pre-training was done with full-context packing (no padding needed). Fine-tuning with batched inputs reintroduces the need."
+}
