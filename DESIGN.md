@@ -152,15 +152,25 @@ This is a **research scaffold for studying generational fine-
 tuning**, not an autonomous self-improvement system. The human
 in the loop is the safety gate.
 
-### Generation cap
+### No fixed generation cap
 
-`MAX_GENERATIONS = 3` for the foreseeable future. Whether the
-setup is even *capable* of three generations of measurable
-improvement is itself one of the research questions; planning past
-that is speculative.
+There is no hard-coded `MAX_GENERATIONS` constant. The recursion
+runs as long as each generation continues to show measurable
+improvement on the eval suite *and* a human chooses to launch the
+next training round.
 
-The cap is enforced by convention (the eval harness and the docs),
-not by any code-level kill switch in G_N itself.
+The actual safety gate is the **human-review-between-generations**
+boundary above: every G_N → G_{N+1} transition is a deliberate
+human-launched RunPod pod, not an automated pipeline. If eval
+scores plateau, get noisier, or start to game the suite in
+unexpected ways, the loop stops because nobody decides to launch
+the next pod — not because a hardcoded counter trips.
+
+That's a softer gate than a numeric cap, but it's the one that
+actually corresponds to the real question: *should we run another
+generation?* A constant of 3 (or 5 or 10) is an arbitrary number;
+"does this generation's eval result justify the next one?" is the
+real call.
 
 ### What this is not
 

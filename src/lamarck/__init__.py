@@ -11,7 +11,3 @@ __version__ = "0.0.0"
 
 # G0 — the fixed base model the whole generational stack starts from.
 G0_MODEL_ID = "deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
-
-# Generation cap. The recursion does not run past this without a
-# fresh design review. See DESIGN.md "Safety boundaries".
-MAX_GENERATIONS = 3
