@@ -1,8 +1,14 @@
-# RunPod workflow — train and serve, then keep the pod alive
+# RunPod workflow — train, persist to HF, serve, keep the pod alive
 
-How to run a Lamarck generation on a RunPod A100 pod, then leave
-the pod running so a local Hermes agent can chat with the freshly-
-trained adapter via an SSH tunnel.
+How to run a Lamarck generation on a RunPod A100 pod, push the
+trained adapter to Hugging Face so it survives pod death, then
+leave the pod running so a local Hermes agent can chat with the
+adapter via an SSH tunnel.
+
+**The pod is ephemeral compute. Hugging Face is the persistent
+home for the adapter.** Every flow either pulls the adapter from
+HF or publishes to it — local pod storage is a working copy,
+never the source of truth.
 
 This document is the operator playbook. The actual scripts live
 under [`scripts/runpod/`](../scripts/runpod/).
@@ -12,13 +18,15 @@ under [`scripts/runpod/`](../scripts/runpod/).
 ## TL;DR
 
 ```bash
-# 1. Spin up a RunPod A100 80GB pod (canonical config in your
-#    memory: torch-v280 image).
+# 0. One-time: a HF token with write access in HF_TOKEN.
+export HF_TOKEN=hf_***  # https://huggingface.co/settings/tokens
+
+# 1. Spin up a RunPod A100 80GB pod (canonical config: torch-v280).
 # 2. On the pod (over SSH):
 git clone <lamarck-repo> /workspace/Lamarck
 cd /workspace/Lamarck
-bash scripts/runpod/RUN_LAMARCK.sh --gen 1
-#    pod-setup → train → serve (foreground; pod stays alive).
+HF_TOKEN=$HF_TOKEN bash scripts/runpod/RUN_LAMARCK.sh --gen 1
+#    pod-setup → train → publish to HF → serve (foreground; pod stays alive)
 
 # 3. From your local machine, SSH-tunnel:
 ssh -L 8000:localhost:8000 root@<pod-host>
@@ -28,9 +36,18 @@ hermes model add lamarck-g1 http://localhost:8000/v1 --no-key
 hermes
 ```
 
+If the pod dies later, spin up a fresh one and run with `--skip-train`:
+
+```bash
+HF_TOKEN=$HF_TOKEN bash scripts/runpod/RUN_LAMARCK.sh --gen 1 --skip-train
+#    pod-setup → pull G1 from HF → serve
+```
+
+Same Hermes session resumes after re-tunneling.
+
 ---
 
-## The four scripts
+## The six scripts
 
 ### `pod-setup.sh` — install dependencies
 
@@ -46,6 +63,42 @@ One-time, idempotent. Installs:
 Uses `pip install --break-system-packages` because RunPod's base
 image gates pip with PEP 668. The pod is single-purpose throwaway
 infra — no point in fighting it with a venv.
+
+### `pull-adapter.sh` — fetch adapter from HF
+
+Downloads a published adapter from Hugging Face into the local
+adapter dir. Required env: `LAMARCK_HF_ADAPTER_REPO` (defaults to
+`CryptoJones/lamarck-g${GEN}-adapter`). If the local dir already
+has a valid `adapter_config.json`, it short-circuits — pass
+`--force` to overwrite.
+
+Used in three places by the orchestrator:
+
+1. **G2+ training:** pulls the parent adapter so `train.py` can
+   stack on it.
+2. **`--skip-train`:** pulls *this* generation's adapter to skip
+   straight to serving (e.g. fresh pod after the old one died).
+3. **Pre-flight in `serve.sh`:** if the local dir is missing,
+   `serve.sh` points at this script.
+
+Uses `huggingface_hub.snapshot_download` rather than the
+`huggingface-cli` because the Python API gives finer control over
+the destination directory and PEFT layout.
+
+### `publish-adapter.sh` — push adapter to HF
+
+Uploads `LAMARCK_ADAPTER_DIR` to `LAMARCK_HF_ADAPTER_REPO` (default
+`CryptoJones/lamarck-g${GEN}-adapter`, private by default — flip
+`LAMARCK_HF_PRIVATE=0` for public). Requires `HF_TOKEN` with write
+access.
+
+Auto-creates the repo if it doesn't exist. Uses `HfApi.upload_folder`
+under the hood (the path Dave's `publish_adapter.sh` settled on
+after `huggingface-cli upload` had rough edges).
+
+Runs immediately after `train.py` in the orchestrator. **This is the
+"insurance" step:** if the pod dies any time after this point, the
+adapter is recoverable from HF without retraining.
 
 ### `train.py` — QLoRA fine-tune
 
@@ -98,14 +151,28 @@ ends the pod's billable time** (modulo RunPod's per-minute rounding).
 
 ### `RUN_LAMARCK.sh` — orchestrator
 
-Runs pod-setup → train → serve in sequence. The serve step uses
-`exec` so the pod owns the vLLM process directly (no orphaned shell).
+Runs the full pipeline in five steps:
+
+```
+1. pod-setup            (skippable with --skip-setup)
+2. pull parent adapter  (G2+ only; pulls G_{N-1} from HF for training)
+3. train OR pull self   (train fresh, OR --skip-train → pull G_N from HF)
+4. publish to HF        (after fresh train; skippable with --no-publish)
+5. serve via vLLM       (foreground; pod stays alive)
+```
+
+The serve step uses `exec` so vLLM owns the pod's foreground process.
 
 Flags:
 
 - `--skip-setup`  — deps already installed.
-- `--skip-train`  — load + serve an existing adapter without re-training.
-- `--gen N`       — which generation (default 1).
+- `--skip-train`  — pull this generation's adapter from HF and skip
+  straight to serve. Useful when a previous pod died and you're
+  resuming on a fresh one.
+- `--no-publish`  — skip the post-train HF upload (only useful for
+  throwaway experimental runs).
+- `--gen N`       — which generation (default 1). G2+ also pulls
+  the parent adapter from HF.
 
 ---
 
@@ -180,18 +247,28 @@ behavior, just use Dave's RUN_DAVE.sh pattern instead.
 
 ---
 
-## Pulling the adapter back to local
+## Pulling the adapter to your local machine
 
-If you want to keep the adapter around after the pod dies, pull it
-to local before stopping the pod:
+Usually unnecessary — HF is the persistent home. But if you want a
+local backup of the adapter on your laptop / workstation:
 
 ```bash
-rsync -avz root@<pod-host>:/workspace/Lamarck/adapters/g1/ \
-    /home/akclark/Source/adapters/lamarck-g1/
+huggingface-cli download \
+    CryptoJones/lamarck-g1-adapter \
+    --local-dir ~/Source/adapters/lamarck-g1
 ```
 
-Then `serve.sh` can load it locally too if you ever spin up a new
-A100 pod and want to skip retraining.
+Or via Python:
+
+```python
+from huggingface_hub import snapshot_download
+snapshot_download("CryptoJones/lamarck-g1-adapter",
+                  local_dir="~/Source/adapters/lamarck-g1")
+```
+
+You can later run `serve.sh` locally (on any A100-class GPU) by
+setting `LAMARCK_ADAPTER_DIR` to that path and skipping all the
+pod plumbing.
 
 ---
 

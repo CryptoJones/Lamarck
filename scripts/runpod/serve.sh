@@ -36,9 +36,12 @@ SERVE_PORT="${LAMARCK_SERVE_PORT:-8000}"
 SERVE_HOST="${LAMARCK_SERVE_HOST:-127.0.0.1}"
 
 # --- pre-flight ---------------------------------------------------------------
-if [ ! -d "$ADAPTER_DIR" ]; then
-    echo "ERROR: adapter dir not found: $ADAPTER_DIR" >&2
-    echo "Set LAMARCK_ADAPTER_DIR or train first (scripts/runpod/train.py)." >&2
+if [ ! -d "$ADAPTER_DIR" ] || [ ! -f "$ADAPTER_DIR/adapter_config.json" ]; then
+    echo "ERROR: no valid PEFT adapter at: $ADAPTER_DIR" >&2
+    echo "Options:" >&2
+    echo "  1. Train fresh:   bash scripts/runpod/train.py" >&2
+    echo "  2. Pull from HF:  bash scripts/runpod/pull-adapter.sh" >&2
+    echo "  3. Set LAMARCK_ADAPTER_DIR to wherever you have it." >&2
     exit 1
 fi
 if [ ! -f "$ADAPTER_DIR/adapter_metadata.json" ]; then
